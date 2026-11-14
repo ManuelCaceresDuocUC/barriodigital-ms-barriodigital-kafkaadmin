@@ -22,11 +22,6 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Versiones de Kafka (temporal)
-        run: |
-          chmod +x mvnw
-          ./mvnw -B -ntp dependency:list -DincludeGroupIds=org.apache.kafka | grep -i kafka
-
       - name: Ejecutar tests
         # Se excluyen los *ApplicationTests (levantan el contexto completo y necesitan Oracle/Kafka reales).
         run: |
@@ -35,8 +30,10 @@ jobs:
 
   deploy:
     name: Desplegar en ec2-apps
+    # DESACTIVADO hasta la integración con ec2-apps: el servicio aún no está en apps/compose.yml ni tiene
+    # cargados los secrets EC2_*. Al integrarlo, cambiar `false &&` por nada.
     # Solo al fusionar en main (no en pull requests) y si los tests pasaron.
-    if: github.event_name == 'push'
+    if: false && github.event_name == 'push'
     needs: test
     uses: ManuelCaceresDuocUC/barriodigital-infra/.github/workflows/deploy-service.yml@main
     with:
