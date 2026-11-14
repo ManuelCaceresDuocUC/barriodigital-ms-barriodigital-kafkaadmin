@@ -27,3 +27,28 @@ springdoc:
     enabled: ${OPENAPI_ENABLED:true}
     path: /swagger-ui.html
     operations-sorter: method
+
+barriodigital:
+  kafkaadmin:
+    connection:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      timeout: ${KAFKA_ADMIN_TIMEOUT:10s}
+    protection:
+      topics:
+        - requests.events
+        - audit.timeline
+    provisioning:
+      enabled: ${KAFKA_PROVISIONING_ENABLED:true}
+      topics:
+        - name: requests.events
+          partitions: 3
+          replication-factor: 3
+          configs:
+            min.insync.replicas: "2"
+            retention.ms: "604800000"
+        - name: audit.timeline
+          partitions: 3
+          replication-factor: 3
+          configs:
+            min.insync.replicas: "2"
+            retention.ms: "2592000000"
