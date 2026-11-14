@@ -95,7 +95,7 @@ class KafkaControllersTest {
 
         mvc.perform(post("/api/kafka/topics/provision"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("0.status").value("EXISTS"));
+                .andExpect(jsonPath("$[0].status").value("EXISTS"));
     }
 
     @Test
