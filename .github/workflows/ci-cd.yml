@@ -22,6 +22,13 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: API del cliente Kafka (temporal)
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -ntp -q dependency:resolve
+          J=$(find ~/.m2 -name 'kafka-clients-4.2.1.jar' | head -1); echo $J
+          for C in org.apache.kafka.clients.admin.ConsumerGroupDescription org.apache.kafka.clients.admin.ConsumerGroupListing org.apache.kafka.clients.admin.MemberDescription org.apache.kafka.clients.admin.DescribeTopicsResult org.apache.kafka.clients.admin.DescribeClusterResult org.apache.kafka.clients.admin.ListConsumerGroupsResult org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult org.apache.kafka.clients.admin.DeleteConsumerGroupsResult org.apache.kafka.clients.admin.AlterConsumerGroupOffsetsResult org.apache.kafka.clients.admin.ListOffsetsResult org.apache.kafka.clients.admin.NewTopic org.apache.kafka.clients.admin.NewPartitions org.apache.kafka.clients.admin.ConfigEntry org.apache.kafka.clients.admin.Config org.apache.kafka.clients.admin.TopicDescription org.apache.kafka.common.GroupState org.apache.kafka.common.TopicPartitionInfo org.apache.kafka.common.Node org.apache.kafka.clients.admin.Admin; do echo "== $C"; javap -cp $J $C | grep -v '^Compiled'; done
+
       - name: Ejecutar tests
         # Se excluyen los *ApplicationTests (levantan el contexto completo y necesitan Oracle/Kafka reales).
         run: |
