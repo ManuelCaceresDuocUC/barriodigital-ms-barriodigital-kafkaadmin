@@ -4,7 +4,10 @@ import java.util.Map;
 
 import jakarta.validation.constraints.NotEmpty;
 
-/** Configuraciones a fijar en un tópico existente (por ejemplo {@code retention.ms}). */
+/**
+ * Configuraciones a fijar en un tópico existente (por ejemplo {@code retention.ms}).
+ * QUÉ ES: DTO de entrada; las claves permitidas las valida TopicConfigRules.
+ */
 public record UpdateTopicConfigRequest(
         @NotEmpty(message = "Debes indicar al menos una configuración")
         Map<String, String> configs) {

@@ -1,4 +1,7 @@
+# QUÉ ES: configuración del microservicio kafkaadmin (administrador de Kafka). Las variables ${NOMBRE:valor}
+# toman el valor de la variable de entorno NOMBRE y, si no existe, usan el valor por defecto.
 server:
+  # Puerto por defecto; en docker-compose se sobreescribe con SERVER_PORT (8087).
   port: 8087
 
 spring:
@@ -8,8 +11,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
+          # Emisor de los tokens (Azure Entra ID): de aquí se obtienen las claves para validar la firma del JWT.
           issuer-uri: ${JWT_ISSUER_URI:https://login.microsoftonline.com/ffcb40ec-aa43-4c4e-acd8-4d27467872c5/v2.0}
 
+# Actuator: solo se expone /actuator/health (con probes liveness/readiness para Docker).
 management:
   endpoints:
     web:
@@ -20,6 +25,7 @@ management:
       probes:
         enabled: true
 
+# Swagger / OpenAPI: se puede apagar en producción con OPENAPI_ENABLED=false.
 springdoc:
   api-docs:
     enabled: ${OPENAPI_ENABLED:true}
@@ -28,27 +34,32 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
 
+# Propiedades propias (se leen con los records de la carpeta config/).
 barriodigital:
   kafkaadmin:
     connection:
+      # Brokers a los que se conecta el cliente Admin (en el despliegue, los 3 brokers del clúster).
       bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      # Tiempo máximo de espera por operación.
       timeout: ${KAFKA_ADMIN_TIMEOUT:10s}
     protection:
+      # Tópicos del sistema: la API se niega a eliminarlos.
       topics:
         - requests.events
         - audit.timeline
     provisioning:
+      # Si es true, al arrancar crea los tópicos de abajo cuando faltan.
       enabled: ${KAFKA_PROVISIONING_ENABLED:true}
       topics:
-        - name: requests.events
+        - name: requests.events          # eventos de solicitudes (los consume report)
+          partitions: 3
+          replication-factor: 3          # una copia en cada broker
+          configs:
+            min.insync.replicas: "2"     # con acks=all, al menos 2 réplicas deben confirmar cada escritura
+            retention.ms: "604800000"    # conserva los mensajes 7 días
+        - name: audit.timeline           # línea de tiempo de auditoría (la consume audit)
           partitions: 3
           replication-factor: 3
           configs:
             min.insync.replicas: "2"
-            retention.ms: "604800000"
-        - name: audit.timeline
-          partitions: 3
-          replication-factor: 3
-          configs:
-            min.insync.replicas: "2"
-            retention.ms: "2592000000"
+            retention.ms: "2592000000"   # conserva los mensajes 30 días

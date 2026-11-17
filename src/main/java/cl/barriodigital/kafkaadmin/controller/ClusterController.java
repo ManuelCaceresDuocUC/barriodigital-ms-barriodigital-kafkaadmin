@@ -10,6 +10,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * QUÉ ES: controlador REST del estado del clúster: GET /api/kafka/cluster. Delega en ClusterService.
+ * (@Tag y @Operation solo alimentan la documentación Swagger; no cambian el comportamiento.)
+ */
 @RestController
 @RequestMapping("/api/kafka/cluster")
 @RequiredArgsConstructor
