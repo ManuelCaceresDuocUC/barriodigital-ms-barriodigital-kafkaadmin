@@ -31,7 +31,12 @@ import cl.barriodigital.kafkaadmin.util.TopicConfigRules;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/** Administración de tópicos: crear, consultar, configurar, ampliar particiones y eliminar. */
+/**
+ * QUÉ ES: servicio que administra los tópicos de Kafka.
+ * QUÉ HACE: crear, listar, consultar detalle, cambiar configuración, ampliar particiones y eliminar.
+ * CONCEPTO: un tópico es un "canal" con nombre donde se publican eventos; se divide en particiones y
+ * cada partición se copia en varios brokers (réplicas). Lo llama TopicController.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -41,6 +46,7 @@ public class TopicService {
     private final KafkaCalls kafka;
     private final ProtectedTopics protectedTopics;
 
+    // Crea un tópico tras validar las configuraciones permitidas (TopicConfigRules).
     public TopicSummary create(CreateTopicRequest request) {
         TopicConfigRules.validate(request.configs());
         NewTopic topic = new NewTopic(request.name(), request.partitions(), request.replicationFactor().shortValue());
@@ -54,6 +60,7 @@ public class TopicService {
                 protectedTopics.isProtected(request.name()));
     }
 
+    // Lista todos los tópicos con su resumen, ordenados por nombre.
     public List<TopicSummary> list() {
         Set<String> names = kafka.await(admin.listTopics().names(), "listar los tópicos", "");
         if (names.isEmpty()) {
@@ -68,6 +75,7 @@ public class TopicService {
                 .toList();
     }
 
+    // Detalle de un tópico: particiones (líder, réplicas, ISR) y configuración; 404 si no existe.
     public TopicDetail get(String name) {
         TopicDescription description = describe(name);
         ConfigResource resource = new ConfigResource(ConfigResource.Type.TOPIC, name);
@@ -116,6 +124,7 @@ public class TopicService {
         return get(name);
     }
 
+    // Elimina un tópico, salvo que sea del sistema (409).
     public void delete(String name) {
         if (protectedTopics.isProtected(name)) {
             throw new ProtectedTopicException(name);
@@ -124,20 +133,24 @@ public class TopicService {
         log.info("Tópico '{}' eliminado", name);
     }
 
+    // Describe un tópico (lanza 404 si no existe, vía KafkaCalls).
     private TopicDescription describe(String name) {
         Map<String, TopicDescription> result =
                 kafka.await(admin.describeTopics(List.of(name)).allTopicNames(), "describir el tópico", name);
         return result.get(name);
     }
 
+    // Factor de replicación = copias de la primera partición (todas tienen el mismo número).
     private static int replicationFactorOf(TopicDescription description) {
         return description.partitions().isEmpty() ? 0 : description.partitions().get(0).replicas().size();
     }
 
+    // Id del broker, o null si no hay líder en este momento.
     private static Integer idOf(Node node) {
         return node == null || node.isEmpty() ? null : node.id();
     }
 
+    // Convierte una lista de brokers en sus ids.
     private static List<Integer> ids(List<Node> nodes) {
         return nodes.stream().map(Node::id).toList();
     }

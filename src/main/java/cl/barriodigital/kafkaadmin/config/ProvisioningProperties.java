@@ -6,7 +6,10 @@ import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.Assert;
 
-/** Tópicos del sistema que se crean al arrancar si no existen (idempotente). */
+/**
+ * Tópicos del sistema que se crean al arrancar si no existen (idempotente).
+ * QUÉ ES: record enlazado al bloque barriodigital.kafkaadmin.provisioning del yaml. Lo lee TopicProvisioner.
+ */
 @ConfigurationProperties(prefix = "barriodigital.kafkaadmin.provisioning")
 public record ProvisioningProperties(boolean enabled, List<TopicDefinition> topics) {
 
@@ -14,6 +17,8 @@ public record ProvisioningProperties(boolean enabled, List<TopicDefinition> topi
         topics = topics == null ? List.of() : List.copyOf(topics);
     }
 
+    // Definición de un tópico a crear: nombre, particiones, factor de replicación y configuraciones extra
+    // (por ejemplo min.insync.replicas = 2).
     public record TopicDefinition(String name, int partitions, int replicationFactor, Map<String, String> configs) {
 
         public TopicDefinition {

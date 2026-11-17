@@ -16,13 +16,20 @@ import org.springframework.stereotype.Component;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-/** Responde 401 y 403 en JSON, con la misma forma que el resto de los errores de la API. */
+/**
+ * Responde 401 y 403 en JSON, con la misma forma que el resto de los errores de la API.
+ *
+ * <p>QUÉ ES: manejador de errores de SEGURIDAD. Los filtros de Spring Security actúan antes de llegar a los
+ * controladores, por eso no los atrapa el GlobalExceptionHandler; este componente cubre ese hueco.
+ * Implementa dos interfaces: AuthenticationEntryPoint (401: no autenticado) y AccessDeniedHandler (403: sin rol).
+ */
 @Component
 public class RestSecurityErrorHandler implements AuthenticationEntryPoint, AccessDeniedHandler {
 
     static final String UNAUTHORIZED_MESSAGE = "Falta un token válido en el encabezado Authorization";
     static final String FORBIDDEN_MESSAGE = "Se requiere el rol Admin para administrar Kafka";
 
+    // 401: no hay token o es inválido. La cabecera WWW-Authenticate indica al cliente que debe enviar un Bearer.
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException authException) throws IOException {
@@ -30,12 +37,14 @@ public class RestSecurityErrorHandler implements AuthenticationEntryPoint, Acces
         write(response, HttpStatus.UNAUTHORIZED, UNAUTHORIZED_MESSAGE);
     }
 
+    // 403: el token es válido, pero el usuario no tiene el rol Admin.
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response,
                        AccessDeniedException accessDeniedException) throws IOException {
         write(response, HttpStatus.FORBIDDEN, FORBIDDEN_MESSAGE);
     }
 
+    // Escribe la respuesta JSON a mano (aquí aún no existe el mecanismo de serialización de los controladores).
     private void write(HttpServletResponse response, HttpStatus status, String message) throws IOException {
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

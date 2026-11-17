@@ -34,17 +34,25 @@ import cl.barriodigital.kafkaadmin.util.KafkaCalls;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/** Consumer groups: estado, miembros, offsets con lag, reseteo de offsets y eliminación. */
+/**
+ * QUÉ ES: servicio que administra los consumer groups de Kafka.
+ * QUÉ HACE: lista grupos, muestra su detalle (miembros, offsets y lag), resetea offsets y elimina grupos.
+ * CONCEPTO: un consumer group es un conjunto de consumidores que se reparten las particiones de un tópico
+ * (aquí: el grupo de report y el de audit). El "offset" es la posición hasta donde leyó; el "lag" es
+ * cuántos mensajes le faltan por leer.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConsumerGroupService {
 
+    // Estado en que Kafka permite mover offsets: sin consumidores conectados.
     private static final String EMPTY = "EMPTY";
 
     private final Admin admin;
     private final KafkaCalls kafka;
 
+    // Lista todos los grupos con su estado, ordenados por nombre.
     public List<GroupSummary> list() {
         Collection<ConsumerGroupListing> groups =
                 kafka.await(admin.listConsumerGroups().all(), "listar los consumer groups", "");
@@ -54,8 +62,11 @@ public class ConsumerGroupService {
                 .toList();
     }
 
+    // Detalle de un grupo; lanza 404 si no existe.
     public GroupDetail get(String groupId) {
         ConsumerGroupDescription description = describe(groupId);
+
+        // Miembros: cada consumidor con las particiones que tiene asignadas.
 
         List<MemberInfo> members = description.members().stream()
                 .sorted(Comparator.comparing(MemberDescription::consumerId))
@@ -64,12 +75,14 @@ public class ConsumerGroupService {
                                 .map(tp -> tp.topic() + "-" + tp.partition()).sorted().toList()))
                 .toList();
 
+        // Offsets confirmados por el grupo (hasta dónde leyó) y fin de cada partición (último mensaje publicado).
         Map<TopicPartition, OffsetAndMetadata> committed = committedOffsets(groupId);
         Map<TopicPartition, ListOffsetsResultInfo> ends = endOffsets(committed.keySet(), groupId);
         List<OffsetLag> offsets = committed.entrySet().stream()
                 .sorted(Comparator.comparing((Map.Entry<TopicPartition, OffsetAndMetadata> e) -> e.getKey().topic())
                         .thenComparingInt(e -> e.getKey().partition()))
                 .map(entry -> {
+                    // lag = fin del log - posición del grupo (nunca negativo).
                     long current = entry.getValue().offset();
                     ListOffsetsResultInfo end = ends.get(entry.getKey());
                     long endOffset = end == null ? current : end.offset();
@@ -78,6 +91,7 @@ public class ConsumerGroupService {
                 })
                 .toList();
 
+        // Coordinador: el broker que gestiona este grupo.
         String coordinator = description.coordinator() == null ? null
                 : description.coordinator().host() + ":" + description.coordinator().port();
         long totalLag = offsets.stream().mapToLong(OffsetLag::lag).sum();
@@ -89,6 +103,7 @@ public class ConsumerGroupService {
      * conectados), por eso se valida antes y se responde 409 con instrucciones en vez de un error genérico.
      */
     public ResetOffsetsResponse resetOffsets(String groupId, ResetOffsetsRequest request) {
+        // 1) Validaciones previas: el grupo debe existir, estar EMPTY, y OFFSET exige un valor.
         ConsumerGroupDescription description = describe(groupId);
         String state = stateName(description.groupState());
         if (!EMPTY.equals(state)) {
@@ -98,6 +113,7 @@ public class ConsumerGroupService {
             throw new InvalidKafkaRequestException("La estrategia OFFSET requiere indicar el offset");
         }
 
+        // 2) Determina las particiones afectadas: todas, o solo la indicada.
         TopicDescription topic = kafka.await(
                 admin.describeTopics(List.of(request.topic())).allTopicNames(), "describir el tópico",
                 request.topic()).get(request.topic());
@@ -110,9 +126,12 @@ public class ConsumerGroupService {
                     + request.partition());
         }
 
+        // 3) Calcula el offset destino por partición según la estrategia.
         Map<TopicPartition, OffsetAndMetadata> target = new HashMap<>();
         switch (request.strategy()) {
+            // OFFSET: el valor indicado por el usuario.
             case OFFSET -> partitions.forEach(tp -> target.put(tp, new OffsetAndMetadata(request.offset())));
+            // EARLIEST/LATEST: se le pregunta a Kafka cuál es el inicio o el fin de cada partición.
             case EARLIEST, LATEST -> {
                 OffsetSpec spec = request.strategy() == ResetStrategy.EARLIEST
                         ? OffsetSpec.earliest() : OffsetSpec.latest();
@@ -123,6 +142,7 @@ public class ConsumerGroupService {
             }
         }
 
+        // 4) Aplica el cambio en Kafka y arma la respuesta.
         kafka.await(admin.alterConsumerGroupOffsets(groupId, target).all(), "resetear los offsets", groupId);
         log.info("Offsets del grupo '{}' en '{}' reseteados ({})", groupId, request.topic(), request.strategy());
 
@@ -132,11 +152,13 @@ public class ConsumerGroupService {
         return new ResetOffsetsResponse(groupId, request.topic(), request.strategy(), result);
     }
 
+    // Elimina el grupo; Kafka rechaza (409) si aún tiene consumidores conectados.
     public void delete(String groupId) {
         kafka.await(admin.deleteConsumerGroups(List.of(groupId)).all(), "eliminar el consumer group", groupId);
         log.info("Consumer group '{}' eliminado", groupId);
     }
 
+    // Describe un grupo y lo trata como inexistente (404) si Kafka lo informa DEAD.
     private ConsumerGroupDescription describe(String groupId) {
         Map<String, ConsumerGroupDescription> result = kafka.await(
                 admin.describeConsumerGroups(List.of(groupId)).all(), "describir el consumer group", groupId);
@@ -148,6 +170,7 @@ public class ConsumerGroupService {
         return description;
     }
 
+    // Offsets confirmados del grupo, sin las particiones que aún no tienen ninguno.
     private Map<TopicPartition, OffsetAndMetadata> committedOffsets(String groupId) {
         Map<TopicPartition, OffsetAndMetadata> committed = kafka.await(
                 admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata(),
@@ -158,6 +181,7 @@ public class ConsumerGroupService {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
+    // Último offset (fin del log) de cada partición pedida; sirve para calcular el lag.
     private Map<TopicPartition, ListOffsetsResultInfo> endOffsets(Set<TopicPartition> partitions, String groupId) {
         if (partitions.isEmpty()) {
             return Map.of();
@@ -167,6 +191,7 @@ public class ConsumerGroupService {
         return kafka.await(admin.listOffsets(query).all(), "consultar el fin de los logs", groupId);
     }
 
+    // Convierte el estado del grupo a texto; null -> UNKNOWN.
     private static String stateName(org.apache.kafka.common.GroupState state) {
         return state == null ? "UNKNOWN" : state.name();
     }

@@ -19,7 +19,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Crea los tópicos del sistema si faltan. Es idempotente: uno que ya existe no se toca.
+ * QUÉ ES: ApplicationRunner, es decir, código que Spring ejecuta una vez al terminar de arrancar.
+ * QUÉ HACE: crea los tópicos del sistema (requests.events y audit.timeline) si faltan. Es idempotente: uno que ya existe no se toca.
  * Al arrancar nunca tumba el servicio: si Kafka no está disponible lo registra y se puede reintentar por la API.
  */
 @Slf4j
@@ -27,10 +28,12 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class TopicProvisioner implements ApplicationRunner {
 
+    // Cliente Admin de Kafka.
     private final Admin admin;
     private final KafkaCalls kafka;
     private final ProvisioningProperties properties;
 
+    // Se ejecuta automáticamente al iniciar el servicio.
     @Override
     public void run(ApplicationArguments args) {
         if (!properties.enabled()) {
@@ -45,6 +48,7 @@ public class TopicProvisioner implements ApplicationRunner {
         }
     }
 
+    // Aprovisiona todos los tópicos definidos en el yaml. También lo usa POST /api/kafka/topics/provision.
     public List<ProvisionResult> provision() {
         List<ProvisionResult> results = new ArrayList<>();
         for (TopicDefinition definition : properties.topics()) {
@@ -53,6 +57,7 @@ public class TopicProvisioner implements ApplicationRunner {
         return results;
     }
 
+    // Crea un tópico; si Kafka dice que ya existe, lo informa como EXISTS en vez de fallar.
     private ProvisionResult provisionOne(TopicDefinition definition) {
         NewTopic topic = new NewTopic(definition.name(), definition.partitions(),
                 (short) definition.replicationFactor());

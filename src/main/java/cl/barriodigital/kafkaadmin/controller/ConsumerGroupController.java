@@ -21,6 +21,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * QUÉ ES: controlador REST de los consumer groups (/api/kafka/groups). Solo traduce HTTP <-> servicio.
+ * RECORDATORIO: un consumer group es un conjunto de consumidores que se reparten las particiones de un tópico;
+ * Kafka guarda por grupo hasta dónde leyó (el offset). En esta app: ms-report-consumer-group-v2 y ms-audit-consumer-group.
+ */
 @RestController
 @RequestMapping("/api/kafka/groups")
 @RequiredArgsConstructor
@@ -29,18 +34,21 @@ public class ConsumerGroupController {
 
     private final ConsumerGroupService groups;
 
+    // GET /api/kafka/groups -> lista de grupos con su estado.
     @GetMapping
     @Operation(summary = "Listar los consumer groups")
     public List<GroupSummary> list() {
         return groups.list();
     }
 
+    // GET /api/kafka/groups/{groupId} -> miembros, offsets por partición y lag (mensajes pendientes).
     @GetMapping("/{groupId}")
     @Operation(summary = "Detalle de un grupo: miembros, offsets y lag")
     public GroupDetail get(@PathVariable String groupId) {
         return groups.get(groupId);
     }
 
+    // POST /api/kafka/groups/{groupId}/offsets/reset -> mover la posición de lectura (volver a leer, saltar...).
     @PostMapping("/{groupId}/offsets/reset")
     @Operation(summary = "Resetear los offsets de un grupo (debe estar EMPTY)")
     public ResetOffsetsResponse resetOffsets(@PathVariable String groupId,
@@ -48,6 +56,7 @@ public class ConsumerGroupController {
         return groups.resetOffsets(groupId, request);
     }
 
+    // DELETE /api/kafka/groups/{groupId} -> 204; falla con 409 si el grupo aún tiene consumidores activos.
     @DeleteMapping("/{groupId}")
     @Operation(summary = "Eliminar un grupo sin consumidores activos")
     public ResponseEntity<Void> delete(@PathVariable String groupId) {
